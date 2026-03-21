@@ -127,7 +127,7 @@ function startPlayback() {
     if (!player.midi) return;
 
     player.playing = true;
-    document.getElementById('btn-play').textContent = '\u23F8';
+    document.getElementById('btn-play').textContent = 'Pause';
 
     Tone.getTransport().cancel();
     Tone.getTransport().bpm.value = player.tempo;
@@ -166,7 +166,7 @@ function stopPlayback() {
     player.playing = false;
     Tone.getTransport().stop();
     Tone.getTransport().cancel();
-    document.getElementById('btn-play').textContent = '\u25B6';
+    document.getElementById('btn-play').textContent = 'Play';
 }
 
 function togglePlayback() {

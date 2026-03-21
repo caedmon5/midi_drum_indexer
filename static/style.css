@@ -273,13 +273,10 @@ button.secondary:hover { background: #4a4a6a; }
 }
 
 .player-controls button {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    font-size: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
 .tempo-control {
