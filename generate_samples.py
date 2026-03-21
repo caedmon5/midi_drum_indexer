@@ -443,12 +443,41 @@ SAMPLES = {
 }
 
 
+# Mix levels — metallic/noise sounds are perceptually louder at the same peak,
+# so we scale them down to sit properly against tonal sounds (kick, toms, congas).
+# 1.0 = full level, lower = quieter.
+MIX_LEVELS = {
+    'kick': 1.0, 'snare': 0.9, 'side_stick': 0.5, 'clap': 0.7,
+    'hihat_closed': 0.35, 'hihat_open': 0.35, 'hihat_pedal': 0.3,
+    'tom_high': 0.9, 'tom_hi_mid': 0.9, 'tom_low_mid': 0.9,
+    'tom_low': 0.9, 'tom_hi_floor': 0.9, 'tom_low_floor': 0.9,
+    'ride': 0.3, 'ride_bell': 0.35, 'crash': 0.3, 'splash': 0.3,
+    'cowbell': 0.5, 'tambourine': 0.35,
+    'hi_bongo': 0.7, 'lo_bongo': 0.7,
+    'mute_hi_conga': 0.7, 'open_hi_conga': 0.7, 'low_conga': 0.7,
+    'hi_timbale': 0.5, 'lo_timbale': 0.5,
+    'hi_agogo': 0.4, 'lo_agogo': 0.4,
+    'cabasa': 0.3, 'maracas': 0.3, 'shaker': 0.3,
+    'claves': 0.45, 'hi_wood_block': 0.45, 'lo_wood_block': 0.45,
+    'mute_triangle': 0.3, 'open_triangle': 0.3,
+    'short_guiro': 0.3, 'long_guiro': 0.3,
+    'mute_cuica': 0.5, 'open_cuica': 0.5,
+    'mute_surdo': 0.9, 'open_surdo': 0.9,
+    'short_whistle': 0.4, 'long_whistle': 0.4,
+    'vibraslap': 0.35,
+    'jingle_bell': 0.3, 'bell_tree': 0.3, 'castanets': 0.35,
+}
+
+
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print(f'Generating {len(SAMPLES)} drum samples...')
     for name, gen_func in SAMPLES.items():
         signal = gen_func()
+        # Apply mix level
+        level = MIX_LEVELS.get(name, 0.5)
+        signal = signal * level
         wav_path = save_wav(f'{name}.wav', signal)
         mp3_path = wav_to_mp3(wav_path)
         size_kb = os.path.getsize(mp3_path) / 1024
