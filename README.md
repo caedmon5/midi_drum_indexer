@@ -1,6 +1,6 @@
 # MIDI Drum Indexer
 
-A search tool for the [800,000 Drum Percussion MIDI Archive](https://archive.org/details/800000_Drum_Percussion_MIDI_Archive6_19_15) — the well-known collection of MIDI drum patterns originally shared on music production forums.
+A search tool for the [800,000 Drum Percussion MIDI Archive]([https://archive.org/details/800000_Drum_Percussion_MIDI_Archive6_19_15](https://www.reddit.com/r/WeAreTheMusicMakers/comments/3anwu8/the_drum_percussion_midi_archive_800k/) — the well-known collection of MIDI drum patterns originally shared on music production forums.
 
 The archive contains ~764k MIDI files organized in folders by genre, but with inconsistent naming and no searchable index. This tool parses every file, extracts musical features, stores them in a SQLite database, and provides a browser-based UI to search, filter, and audition patterns instantly.
 
