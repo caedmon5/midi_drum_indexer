@@ -178,8 +178,7 @@ def _run_indexer(archive_root, index_all):
     """Run the indexer in-process with progress tracking."""
     global indexer_status
     from indexer import init_db, get_indexed_paths, collect_midi_files, \
-        build_instrument_lookup, insert_result
-    from analyzer import analyze_midi
+        build_instrument_lookup, insert_result, _analyze_wrapper
     from multiprocessing import Pool, cpu_count
 
     indexer_status['message'] = 'Initializing database...'
@@ -217,11 +216,8 @@ def _run_indexer(archive_root, index_all):
     results_batch = []
     processed = 0
 
-    def analyze_wrapper(args):
-        return analyze_midi(args[0], args[1])
-
     with Pool(workers) as pool:
-        for result in pool.imap_unordered(analyze_wrapper, to_process):
+        for result in pool.imap_unordered(_analyze_wrapper, to_process):
             processed += 1
             indexer_status['progress'] = processed
 
