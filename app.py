@@ -2,17 +2,19 @@
 """Flask web app for searching and playing MIDI drum patterns."""
 
 import json
+import logging
 import os
 import sqlite3
-import subprocess
 import sys
 import threading
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, \
     redirect, url_for, Response
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'drums.db')
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
+LOG_PATH = os.path.join(os.path.dirname(__file__), 'indexer.log')
 
 # Indexer progress tracking
 indexer_status = {
@@ -104,6 +106,21 @@ def validate_path():
     if not os.path.isdir(path):
         return jsonify({'valid': False, 'error': 'Directory not found.'})
 
+    # Auto-detect double-nested archive structure:
+    # The zip extracts to folder/folder/, so user might point at either level.
+    # If we see only 1-2 subdirs and one matches the parent name, go deeper.
+    entries = [e for e in os.listdir(path)
+               if os.path.isdir(os.path.join(path, e)) and e != '__MACOSX']
+    if len(entries) <= 2:
+        for e in entries:
+            inner = os.path.join(path, e)
+            inner_subs = [s for s in os.listdir(inner)
+                          if os.path.isdir(os.path.join(inner, s))]
+            if len(inner_subs) > 5:
+                # This looks like the real archive root
+                path = inner
+                break
+
     # Look for MIDI files
     midi_count = 0
     folders_found = []
@@ -127,6 +144,7 @@ def validate_path():
 
     return jsonify({
         'valid': True,
+        'resolved_path': path,
         'folders': sorted(folders_found),
         'message': f'Found {len(folders_found)} folders with MIDI files.'
     })
@@ -174,6 +192,18 @@ def start_indexing():
     return jsonify({'started': True})
 
 
+def _setup_log():
+    """Configure a logger that writes to indexer.log."""
+    logger = logging.getLogger('indexer')
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        fh = logging.FileHandler(LOG_PATH)
+        fh.setFormatter(logging.Formatter(
+            '%(asctime)s  %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+        logger.addHandler(fh)
+    return logger
+
+
 def _run_indexer(archive_root, index_all):
     """Run the indexer in-process with progress tracking."""
     global indexer_status
@@ -181,10 +211,18 @@ def _run_indexer(archive_root, index_all):
         build_instrument_lookup, insert_result, _analyze_wrapper
     from multiprocessing import Pool, cpu_count
 
+    log = _setup_log()
+    log.info('=' * 60)
+    log.info('Indexing started')
+    log.info(f'Archive root: {archive_root}')
+    log.info(f'Index all: {index_all}')
+    start_time = datetime.now()
+
     indexer_status['message'] = 'Initializing database...'
     conn = init_db(DB_PATH)
     indexed = get_indexed_paths(conn)
     instrument_lookup = build_instrument_lookup(conn)
+    log.info(f'Already indexed: {len(indexed)} files')
 
     indexer_status['message'] = 'Scanning for MIDI files...'
 
@@ -197,15 +235,18 @@ def _run_indexer(archive_root, index_all):
         all_dirs = [d for d in os.listdir(archive_root)
                     if os.path.isdir(os.path.join(archive_root, d))]
         folders = [d for d in all_dirs if d not in exclude]
+        log.info(f'Curated folders ({len(folders)}): {", ".join(sorted(folders))}')
 
     midi_files = collect_midi_files(archive_root, folders)
     to_process = [(f, archive_root) for f in midi_files
                   if os.path.relpath(f, archive_root) not in indexed]
 
+    log.info(f'Found {len(midi_files)} MIDI files, {len(to_process)} new')
     indexer_status['total'] = len(to_process)
     indexer_status['message'] = f'Indexing {len(to_process)} files...'
 
     if not to_process:
+        log.info('Nothing to index')
         indexer_status['message'] = 'All files already indexed.'
         indexer_status['done'] = True
         indexer_status['running'] = False
@@ -215,6 +256,7 @@ def _run_indexer(archive_root, index_all):
     workers = min(cpu_count(), 8)
     results_batch = []
     processed = 0
+    failed = 0
 
     with Pool(workers) as pool:
         for result in pool.imap_unordered(_analyze_wrapper, to_process):
@@ -223,6 +265,8 @@ def _run_indexer(archive_root, index_all):
 
             if result is not None:
                 results_batch.append(result)
+            else:
+                failed += 1
 
             if len(results_batch) >= 500:
                 for r in results_batch:
@@ -234,12 +278,18 @@ def _run_indexer(archive_root, index_all):
                 indexer_status['message'] = \
                     f'Indexed {processed} / {len(to_process)} files...'
 
+            if processed % 1000 == 0:
+                log.info(f'Progress: {processed} / {len(to_process)}')
+
     # Insert remaining
     for r in results_batch:
         insert_result(conn, r, instrument_lookup)
     conn.commit()
 
     total = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+    elapsed = (datetime.now() - start_time).total_seconds()
+    log.info(f'Indexing complete: {total} files in database, '
+             f'{failed} files failed to parse, {elapsed:.1f}s elapsed')
     indexer_status['message'] = f'Done! {total} files indexed.'
     indexer_status['done'] = True
     indexer_status['running'] = False

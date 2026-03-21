@@ -185,6 +185,8 @@
             This scans every MIDI file and extracts musical features
             (tempo, time signature, instruments, beat positions).
             The curated folders (~19k files) take about 15 seconds.
+            You only need to do this once — the database is saved to disk
+            and will be used on future runs unless you delete <code>drums.db</code>.
         </p>
         <div class="options">
             <label>
@@ -209,6 +211,7 @@
 
 <script>
 let pathValid = false;
+let resolvedPath = '';
 
 async function validatePath() {
     const path = document.getElementById('archive-path').value.trim();
@@ -220,6 +223,7 @@ async function validatePath() {
     msgEl.style.display = 'none';
     folderEl.innerHTML = '';
     pathValid = false;
+    resolvedPath = '';
     startBtn.disabled = true;
 
     if (!path) {
@@ -236,7 +240,13 @@ async function validatePath() {
     const data = await res.json();
 
     if (data.valid) {
-        msgEl.textContent = data.message;
+        resolvedPath = data.resolved_path || path;
+        let msg = data.message;
+        if (resolvedPath !== path) {
+            msg += ' (auto-detected inner folder)';
+            document.getElementById('archive-path').value = resolvedPath;
+        }
+        msgEl.textContent = msg;
         msgEl.className = 'validation-msg valid';
         if (data.folders && data.folders.length > 0) {
             folderEl.innerHTML = 'Folders: ' + data.folders.join(', ');
@@ -252,7 +262,7 @@ async function validatePath() {
 async function startIndexing() {
     if (!pathValid) return;
 
-    const path = document.getElementById('archive-path').value.trim();
+    const path = resolvedPath || document.getElementById('archive-path').value.trim();
     const indexAll = document.getElementById('index-all').checked;
     const startBtn = document.getElementById('start-btn');
     const progressArea = document.getElementById('progress-area');
