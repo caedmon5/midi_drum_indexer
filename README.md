@@ -25,26 +25,13 @@ The archive contains ~764k MIDI files organized in folders by genre, but with in
 
 ## In-browser playback
 
-Results can be auditioned directly in the browser using synthesized drum sounds (Tone.js). No external samples required. Playback supports looping and tempo adjustment.
+Results can be auditioned directly in the browser using bundled drum samples (48 instruments, ~290KB total) played back via Tone.js. Covers the full GM percussion map including kit drums, Latin percussion, shakers, bells, and more. Playback supports looping and tempo adjustment.
 
 ## Getting started
 
-### 1. Get the MIDI archive
+### 1. Download the MIDI archive
 
-Download the [800,000 Drum Percussion MIDI Archive](https://archive.org/details/800000_Drum_Percussion_MIDI_Archive6_19_15) from the Internet Archive. It's a single zip file (~1.5 GB). Unzip it somewhere on your machine — you'll end up with a folder structure like:
-
-```
-800000_Drum_Percussion_MIDI_Archive[6_19_15]/
-├── Africa/
-├── Blues Drums/
-├── Bossa/
-├── Funk Drums/
-├── Jazz/
-├── Rock:Indie/
-├── GM MIDI Pack [360,000 files]/
-├── Superior Drummer 2 Drum Midi [425,000 files]/
-└── ... (47 genre folders total)
-```
+Download the [800,000 Drum Percussion MIDI Archive](https://archive.org/details/800000_Drum_Percussion_MIDI_Archive6_19_15) from the Internet Archive. It's a single zip file (~1.5 GB). Unzip it somewhere on your machine.
 
 ### 2. Clone this repo and install dependencies
 
@@ -56,37 +43,25 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Build the database
-
-Point the indexer at the top-level archive folder (the one containing the genre subfolders):
-
-```bash
-python3 indexer.py --archive /path/to/800000_Drum_Percussion_MIDI_Archive[6_19_15]
-```
-
-This indexes the curated genre folders (~19k files) and takes about 15 seconds. A `drums.db` file will be created in the project directory.
-
-The two massive collections (GM MIDI Pack at 360k files and Superior Drummer 2 at 425k files) are skipped by default. To index everything:
-
-```bash
-python3 indexer.py --archive /path/to/archive --all
-```
-
-To index only specific folders:
-
-```bash
-python3 indexer.py --archive /path/to/archive --folders "Jazz,Blues Drums,Bossa,Rock:Indie"
-```
-
-The indexer is idempotent — re-running it skips files already in the database.
-
-### 4. Run the web UI
+### 3. Run the app
 
 ```bash
 python3 app.py
 ```
 
-Open [http://localhost:5000](http://localhost:5000) in your browser. You'll see the search interface with filters on the left and results on the right. Click the play button on any result to audition it.
+Open [http://localhost:5000](http://localhost:5000) in your browser. On first run you'll be taken to a setup page that walks you through pointing the tool at your archive and building the database. The curated genre folders (~19k files) index in about 15 seconds.
+
+### Command-line indexing (optional)
+
+You can also build the database from the command line if you prefer:
+
+```bash
+python3 indexer.py --archive /path/to/800000_Drum_Percussion_MIDI_Archive[6_19_15]
+```
+
+The two massive collections (GM MIDI Pack at 360k files and Superior Drummer 2 at 425k files) are skipped by default. To index everything, pass `--all`. To index specific folders: `--folders "Jazz,Blues Drums,Bossa"`.
+
+The indexer is idempotent — re-running it skips files already in the database.
 
 ## Architecture
 
@@ -94,10 +69,13 @@ Open [http://localhost:5000](http://localhost:5000) in your browser. You'll see 
 |------|---------|
 | `indexer.py` | Walks the archive, processes files in parallel, writes to SQLite |
 | `analyzer.py` | MIDI parser and feature extraction (time sig detection, swing analysis, beat grid quantization) |
-| `app.py` | Flask web app with search API and MIDI file serving |
+| `app.py` | Flask web app with search API, MIDI file serving, and setup wizard |
 | `schema.sql` | Database schema (5 tables) and GM percussion instrument seed data |
+| `generate_samples.py` | Generates the bundled drum sample mp3s via numpy synthesis |
+| `templates/setup.html` | First-run setup wizard (archive path, database build with progress) |
 | `templates/index.html` | Search UI with filters, beat grid editor, results table |
-| `static/player.js` | Tone.js drum synthesizer and MIDI playback engine |
+| `static/player.js` | Tone.js sample-based MIDI playback engine |
+| `static/samples/` | 48 drum sample mp3s (~290KB total) |
 | `static/style.css` | Dark theme responsive layout |
 
 ## Known limitations

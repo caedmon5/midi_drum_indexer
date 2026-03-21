@@ -1,17 +1,58 @@
 #!/usr/bin/env python3
 """Flask web app for searching and playing MIDI drum patterns."""
 
+import json
 import os
 import sqlite3
-from flask import Flask, render_template, request, jsonify, send_file
+import subprocess
+import sys
+import threading
+from flask import Flask, render_template, request, jsonify, send_file, \
+    redirect, url_for, Response
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'drums.db')
-ARCHIVE_ROOT = os.path.expanduser(
-    '~/Dropbox/Music/drumMidi/'
-    '800000_Drum_Percussion_MIDI_Archive[6_19_15]/'
-    '800000_Drum_Percussion_MIDI_Archive[6_19_15]'
-)
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
+
+# Indexer progress tracking
+indexer_status = {
+    'running': False,
+    'progress': 0,
+    'total': 0,
+    'message': '',
+    'done': False,
+    'error': None,
+}
+
+
+def load_config():
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH) as f:
+            return json.load(f)
+    return {}
+
+
+def save_config(config):
+    with open(CONFIG_PATH, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
+def get_archive_root():
+    config = load_config()
+    return config.get('archive_root', '')
+
+
+def db_ready():
+    """Check if the database exists and has indexed files."""
+    if not os.path.exists(DB_PATH):
+        return False
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        count = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception:
+        return False
 
 
 def get_db():
@@ -22,6 +63,9 @@ def get_db():
 
 @app.route('/')
 def index():
+    if not db_ready():
+        return redirect(url_for('setup'))
+
     db = get_db()
     folders = [r[0] for r in db.execute(
         'SELECT DISTINCT folder FROM files ORDER BY folder').fetchall()]
@@ -35,6 +79,181 @@ def index():
     db.close()
     return render_template('index.html', folders=folders, categories=categories,
                            instruments_by_cat=instruments_by_cat)
+
+
+@app.route('/setup')
+def setup():
+    config = load_config()
+    archive_root = config.get('archive_root', '')
+    return render_template('setup.html', archive_root=archive_root,
+                           db_exists=db_ready(),
+                           indexer_status=indexer_status)
+
+
+@app.route('/api/setup/validate', methods=['POST'])
+def validate_path():
+    """Check if a path looks like the MIDI archive."""
+    data = request.get_json()
+    path = data.get('path', '').strip()
+
+    if not path:
+        return jsonify({'valid': False, 'error': 'Please enter a path.'})
+
+    path = os.path.expanduser(path)
+
+    if not os.path.isdir(path):
+        return jsonify({'valid': False, 'error': 'Directory not found.'})
+
+    # Look for MIDI files
+    midi_count = 0
+    folders_found = []
+    for entry in os.listdir(path):
+        entry_path = os.path.join(path, entry)
+        if os.path.isdir(entry_path) and entry != '__MACOSX':
+            folders_found.append(entry)
+            # Quick check: any .mid files in this folder?
+            for _, _, files in os.walk(entry_path):
+                midi_count += sum(1 for f in files if f.lower().endswith(('.mid', '.midi')))
+                if midi_count > 10:
+                    break
+            if midi_count > 10:
+                break
+
+    if midi_count == 0:
+        return jsonify({'valid': False,
+                        'error': 'No MIDI files found in this directory. '
+                                 'Make sure you point to the folder containing '
+                                 'the genre subfolders (Jazz, Rock, etc.).'})
+
+    return jsonify({
+        'valid': True,
+        'folders': sorted(folders_found),
+        'message': f'Found {len(folders_found)} folders with MIDI files.'
+    })
+
+
+@app.route('/api/setup/start', methods=['POST'])
+def start_indexing():
+    """Start the indexing process."""
+    global indexer_status
+
+    if indexer_status['running']:
+        return jsonify({'error': 'Indexer is already running.'}), 409
+
+    data = request.get_json()
+    archive_path = os.path.expanduser(data.get('path', '').strip())
+    index_all = data.get('index_all', False)
+
+    if not os.path.isdir(archive_path):
+        return jsonify({'error': 'Invalid path.'}), 400
+
+    # Save config
+    save_config({'archive_root': archive_path})
+
+    # Reset status
+    indexer_status = {
+        'running': True,
+        'progress': 0,
+        'total': 0,
+        'message': 'Starting...',
+        'done': False,
+        'error': None,
+    }
+
+    # Run indexer in background thread
+    def run_indexer():
+        try:
+            _run_indexer(archive_path, index_all)
+        except Exception as e:
+            indexer_status['error'] = str(e)
+            indexer_status['running'] = False
+
+    thread = threading.Thread(target=run_indexer, daemon=True)
+    thread.start()
+
+    return jsonify({'started': True})
+
+
+def _run_indexer(archive_root, index_all):
+    """Run the indexer in-process with progress tracking."""
+    global indexer_status
+    from indexer import init_db, get_indexed_paths, collect_midi_files, \
+        build_instrument_lookup, insert_result
+    from analyzer import analyze_midi
+    from multiprocessing import Pool, cpu_count
+
+    indexer_status['message'] = 'Initializing database...'
+    conn = init_db(DB_PATH)
+    indexed = get_indexed_paths(conn)
+    instrument_lookup = build_instrument_lookup(conn)
+
+    indexer_status['message'] = 'Scanning for MIDI files...'
+
+    # Determine folders
+    folders = None
+    if not index_all:
+        exclude = {'GM MIDI Pack [360,000 files]',
+                   'Superior Drummer 2 Drum Midi [425,000 files]',
+                   '__MACOSX'}
+        all_dirs = [d for d in os.listdir(archive_root)
+                    if os.path.isdir(os.path.join(archive_root, d))]
+        folders = [d for d in all_dirs if d not in exclude]
+
+    midi_files = collect_midi_files(archive_root, folders)
+    to_process = [(f, archive_root) for f in midi_files
+                  if os.path.relpath(f, archive_root) not in indexed]
+
+    indexer_status['total'] = len(to_process)
+    indexer_status['message'] = f'Indexing {len(to_process)} files...'
+
+    if not to_process:
+        indexer_status['message'] = 'All files already indexed.'
+        indexer_status['done'] = True
+        indexer_status['running'] = False
+        conn.close()
+        return
+
+    workers = min(cpu_count(), 8)
+    results_batch = []
+    processed = 0
+
+    def analyze_wrapper(args):
+        return analyze_midi(args[0], args[1])
+
+    with Pool(workers) as pool:
+        for result in pool.imap_unordered(analyze_wrapper, to_process):
+            processed += 1
+            indexer_status['progress'] = processed
+
+            if result is not None:
+                results_batch.append(result)
+
+            if len(results_batch) >= 500:
+                for r in results_batch:
+                    insert_result(conn, r, instrument_lookup)
+                conn.commit()
+                results_batch.clear()
+
+            if processed % 100 == 0:
+                indexer_status['message'] = \
+                    f'Indexed {processed} / {len(to_process)} files...'
+
+    # Insert remaining
+    for r in results_batch:
+        insert_result(conn, r, instrument_lookup)
+    conn.commit()
+
+    total = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
+    indexer_status['message'] = f'Done! {total} files indexed.'
+    indexer_status['done'] = True
+    indexer_status['running'] = False
+    conn.close()
+
+
+@app.route('/api/setup/status')
+def indexer_progress():
+    """Return current indexer status."""
+    return jsonify(indexer_status)
 
 
 @app.route('/api/search')
@@ -220,17 +439,20 @@ def beat_grid(file_id):
 @app.route('/api/midi/<int:file_id>')
 def serve_midi(file_id):
     """Serve a MIDI file for playback."""
+    archive_root = get_archive_root()
+    if not archive_root:
+        return 'Archive not configured', 500
     db = get_db()
     row = db.execute('SELECT path FROM files WHERE id = ?', (file_id,)).fetchone()
     db.close()
     if not row:
         return 'Not found', 404
-    full_path = os.path.join(ARCHIVE_ROOT, row['path'])
+    full_path = os.path.join(archive_root, row['path'])
     if not os.path.isfile(full_path):
         return 'File not found', 404
     # Ensure the resolved path is within the archive root
     real_path = os.path.realpath(full_path)
-    real_root = os.path.realpath(ARCHIVE_ROOT)
+    real_root = os.path.realpath(archive_root)
     if not real_path.startswith(real_root):
         return 'Forbidden', 403
     return send_file(real_path, mimetype='audio/midi')
