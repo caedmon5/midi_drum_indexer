@@ -35,6 +35,7 @@ h3 { font-size: 0.9rem; margin-bottom: 0.3rem; color: #8fbcbb; }
     background: #16213e;
     border-radius: 8px;
     padding: 1rem;
+    padding-bottom: 5rem;
     position: sticky;
     top: 1rem;
     max-height: calc(100vh - 2rem);

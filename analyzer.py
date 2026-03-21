@@ -120,7 +120,7 @@ def analyze_midi(filepath, archive_root):
     duration_sec = mido.tick2second(max_tick, ticks_per_beat, tempo)
 
     # Detect time signature from pattern length
-    time_sig_detected = detect_time_signature(pattern_length_beats, folder)
+    time_sig_detected = detect_time_signature(pattern_length_beats, folder, time_sig_stated)
 
     # Map notes to instruments and build beat grid
     instrument_counts = {}
@@ -183,51 +183,72 @@ def analyze_midi(filepath, archive_root):
     }
 
 
-def detect_time_signature(pattern_length_beats, folder_name):
-    """Infer time signature from pattern length and folder hints."""
+def detect_time_signature(pattern_length_beats, folder_name, stated_sig='4/4'):
+    """Infer time signature from pattern length, folder hints, and stated sig.
+
+    Strategy: trust the stated time signature unless there's strong evidence
+    against it. Pattern length alone is too ambiguous — e.g. a 15-beat pattern
+    could be 4 bars of 4/4 (last note on beat 15 of 16) or 5 bars of 3/4.
+    """
     folder_lower = folder_name.lower()
-
-    # Folder hints
-    if 'waltz' in folder_lower or 'nothing but three' in folder_lower:
-        if abs(pattern_length_beats % 3) < 0.5:
-            return '3/4'
-
-    # Round to nearest reasonable length
     length = round(pattern_length_beats, 1)
 
     if length <= 0:
         return 'unknown'
 
-    # Check common signatures
-    remainder_3 = length % 3
-    remainder_4 = length % 4
+    # Strong folder hints override everything
+    waltz_folder = any(w in folder_lower for w in ('waltz', 'nothing but three'))
+    if waltz_folder:
+        return '3/4'
 
-    # Is it cleanly divisible by 3 but not 4?
-    fits_3 = remainder_3 < 0.5 or remainder_3 > 2.5
-    fits_4 = remainder_4 < 0.5 or remainder_4 > 3.5
+    # Odd meter folders/stated sigs — trust these, they're intentional
+    odd_meter_folder = 'odd meter' in folder_lower
+    if odd_meter_folder:
+        # Try to detect which odd meter from pattern length
+        if abs(length % 3.5) < 0.4 or stated_sig == '7/8':
+            return '7/8'
+        if abs(length % 2.5) < 0.4 or stated_sig == '5/4':
+            return '5/4'
+        if stated_sig in ('7/8', '5/4', '5/8', '9/8', '11/8'):
+            return stated_sig
+        # Fall through to length-based detection below
 
-    if fits_3 and not fits_4:
-        if length <= 3.5:
-            return '3/4'
-        elif length <= 6.5:
-            return '6/8'
-        else:
-            return '3/4'
-    elif fits_4 and not fits_3:
-        return '4/4'
-    elif fits_4 and fits_3:
-        # Ambiguous, default to 4/4 unless folder hints suggest otherwise
-        if any(w in folder_lower for w in ('waltz', 'three', '3/4')):
-            return '3/4'
-        return '4/4'
-
-    # Odd meters
-    if abs(length % 5) < 0.5:
-        return '5/4'
-    if abs(length % 3.5) < 0.3:
+    # For non-standard stated sigs, trust them if the length is compatible
+    if stated_sig == '3/4' and _near_multiple(length, 3):
+        return '3/4'
+    if stated_sig == '6/8' and _near_multiple(length, 3):
+        return '6/8'
+    if stated_sig == '6/4' and _near_multiple(length, 6):
+        return '6/4'
+    if stated_sig in ('7/8',) and _near_multiple(length, 3.5):
         return '7/8'
+    if stated_sig in ('5/4', '5/8') and _near_multiple(length, 2.5):
+        return '5/4'
 
-    return '4/4'
+    # For stated 4/4 (the vast majority), only override with strong evidence:
+    # the pattern must fit 3 cleanly AND not fit 4 at all
+    fits_3_only = _near_multiple(length, 3) and not _near_multiple(length, 4)
+    if fits_3_only and length <= 6.5:
+        # Short pattern that's clearly in 3 — but still check folder context
+        # Many 3-beat patterns are just 4/4 fills ending on beat 3
+        if any(w in folder_lower for w in ('waltz', 'three', '3/4', 'bossa')):
+            return '3/4'
+        # A 3-beat pattern from a rock/funk/pop folder is almost certainly
+        # a truncated 4/4 fill, not a waltz
+        return stated_sig
+
+    # Detect 6/8 from pattern length (must not also fit 4)
+    if _near_multiple(length, 6) and not _near_multiple(length, 4):
+        return '6/8'
+
+    # Default: trust the stated signature
+    return stated_sig
+
+
+def _near_multiple(length, divisor, tolerance=0.5):
+    """Check if length is approximately a multiple of divisor."""
+    remainder = length % divisor
+    return remainder < tolerance or remainder > (divisor - tolerance)
 
 
 def detect_swing(notes, ticks_per_beat):
