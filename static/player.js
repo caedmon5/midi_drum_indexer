@@ -1,127 +1,87 @@
 /**
  * MIDI Drum Player using Tone.js
- * Parses MIDI files client-side with @tonejs/midi and plays with sampled drums.
+ * Parses MIDI files client-side with @tonejs/midi and plays with sample-based drums.
  */
 
-// GM drum note to sample mapping
+// GM drum note to sample file mapping
 const GM_DRUM_SAMPLES = {
     35: 'kick', 36: 'kick',
-    37: 'stick', 38: 'snare', 40: 'snare',
+    37: 'side_stick', 38: 'snare', 40: 'snare',
     39: 'clap',
-    41: 'tom_low', 43: 'tom_low',
-    42: 'hihat_closed', 44: 'hihat_closed',
-    45: 'tom_mid', 47: 'tom_mid', 48: 'tom_mid',
-    46: 'hihat_open',
-    49: 'crash', 52: 'crash', 55: 'crash', 57: 'crash',
-    50: 'tom_high',
-    51: 'ride', 53: 'ride', 59: 'ride',
-    54: 'tambourine',
-    56: 'cowbell',
+    41: 'tom_low_floor', 42: 'hihat_closed', 43: 'tom_hi_floor',
+    44: 'hihat_pedal', 45: 'tom_low', 46: 'hihat_open',
+    47: 'tom_low_mid', 48: 'tom_hi_mid',
+    49: 'crash', 50: 'tom_high',
+    51: 'ride', 52: 'crash', 53: 'ride_bell',
+    54: 'tambourine', 55: 'splash', 56: 'cowbell',
+    57: 'crash', 58: 'vibraslap', 59: 'ride',
+    60: 'hi_bongo', 61: 'lo_bongo',
+    62: 'mute_hi_conga', 63: 'open_hi_conga', 64: 'low_conga',
+    65: 'hi_timbale', 66: 'lo_timbale',
+    67: 'hi_agogo', 68: 'lo_agogo',
+    69: 'cabasa', 70: 'maracas',
+    71: 'short_whistle', 72: 'long_whistle',
+    73: 'short_guiro', 74: 'long_guiro',
+    75: 'claves', 76: 'hi_wood_block', 77: 'lo_wood_block',
+    78: 'mute_cuica', 79: 'open_cuica',
+    80: 'mute_triangle', 81: 'open_triangle',
+    82: 'shaker', 83: 'jingle_bell', 84: 'bell_tree',
+    85: 'castanets', 86: 'mute_surdo', 87: 'open_surdo',
 };
 
-// Simple synthesized drum sounds (no external samples needed)
-class DrumSynth {
+// All unique sample names
+const SAMPLE_NAMES = [...new Set(Object.values(GM_DRUM_SAMPLES))];
+
+class DrumSampler {
     constructor() {
         this.ready = false;
-        this.synths = {};
+        this.players = {};
+        this.gainNodes = {};
     }
 
     async init() {
         if (this.ready) return;
         await Tone.start();
 
-        this.synths = {
-            kick: new Tone.MembraneSynth({
-                pitchDecay: 0.05, octaves: 6, oscillator: { type: 'sine' },
-                envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 }
-            }).toDestination(),
-            snare: new Tone.NoiseSynth({
-                noise: { type: 'white' },
-                envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 }
-            }).toDestination(),
-            hihat_closed: new Tone.MetalSynth({
-                frequency: 400, envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
-                harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5
-            }).toDestination(),
-            hihat_open: new Tone.MetalSynth({
-                frequency: 400, envelope: { attack: 0.001, decay: 0.3, release: 0.1 },
-                harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5
-            }).toDestination(),
-            ride: new Tone.MetalSynth({
-                frequency: 300, envelope: { attack: 0.001, decay: 0.8, release: 0.2 },
-                harmonicity: 12, modulationIndex: 20, resonance: 5000, octaves: 1
-            }).toDestination(),
-            crash: new Tone.MetalSynth({
-                frequency: 250, envelope: { attack: 0.001, decay: 1.5, release: 0.3 },
-                harmonicity: 5.1, modulationIndex: 40, resonance: 3000, octaves: 1.5
-            }).toDestination(),
-            tom_high: new Tone.MembraneSynth({
-                pitchDecay: 0.02, octaves: 4, oscillator: { type: 'sine' },
-                envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.05 }
-            }).toDestination(),
-            tom_mid: new Tone.MembraneSynth({
-                pitchDecay: 0.02, octaves: 4, oscillator: { type: 'sine' },
-                envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.05 }
-            }).toDestination(),
-            tom_low: new Tone.MembraneSynth({
-                pitchDecay: 0.02, octaves: 4, oscillator: { type: 'sine' },
-                envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.05 }
-            }).toDestination(),
-            stick: new Tone.NoiseSynth({
-                noise: { type: 'pink' },
-                envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.01 }
-            }).toDestination(),
-            clap: new Tone.NoiseSynth({
-                noise: { type: 'white' },
-                envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.05 }
-            }).toDestination(),
-            cowbell: new Tone.MetalSynth({
-                frequency: 560, envelope: { attack: 0.001, decay: 0.15, release: 0.05 },
-                harmonicity: 2, modulationIndex: 10, resonance: 2000, octaves: 0.5
-            }).toDestination(),
-            tambourine: new Tone.MetalSynth({
-                frequency: 500, envelope: { attack: 0.001, decay: 0.1, release: 0.05 },
-                harmonicity: 8, modulationIndex: 25, resonance: 3500, octaves: 1
-            }).toDestination(),
-        };
+        // Load all samples
+        const loadPromises = SAMPLE_NAMES.map(name => {
+            return new Promise((resolve) => {
+                const p = new Tone.Player({
+                    url: `/static/samples/${name}.mp3`,
+                    onload: () => resolve(),
+                    onerror: () => {
+                        console.warn(`Failed to load sample: ${name}`);
+                        resolve();
+                    }
+                });
+                const gain = new Tone.Gain(1).toDestination();
+                p.connect(gain);
+                this.players[name] = p;
+                this.gainNodes[name] = gain;
+            });
+        });
 
-        // Set volumes
-        this.synths.kick.volume.value = -3;
-        this.synths.hihat_closed.volume.value = -12;
-        this.synths.hihat_open.volume.value = -12;
-        this.synths.ride.volume.value = -15;
-        this.synths.crash.volume.value = -15;
-        this.synths.cowbell.volume.value = -10;
-        this.synths.tambourine.volume.value = -12;
-        this.synths.tom_high.volume.value = -3;
-        this.synths.tom_mid.volume.value = -3;
-        this.synths.tom_low.volume.value = -3;
-
+        await Promise.all(loadPromises);
         this.ready = true;
+        console.log(`Loaded ${Object.keys(this.players).length} drum samples`);
     }
 
-    trigger(name, velocity = 1.0, time) {
-        const synth = this.synths[name];
-        if (!synth) return;
+    trigger(name, velocity = 100, time) {
+        const p = this.players[name];
+        if (!p || !p.loaded) return;
 
         const vel = Math.min(1, velocity / 127);
+        this.gainNodes[name].gain.setValueAtTime(vel, time);
 
-        if (synth instanceof Tone.MembraneSynth) {
-            const pitches = {
-                kick: 'C1', tom_high: 'G3', tom_mid: 'D3', tom_low: 'A2'
-            };
-            synth.triggerAttackRelease(pitches[name] || 'C2', '8n', time, vel);
-        } else if (synth instanceof Tone.NoiseSynth) {
-            synth.triggerAttackRelease('16n', time, vel);
-        } else if (synth instanceof Tone.MetalSynth) {
-            synth.triggerAttackRelease('32n', time, vel);
-        }
+        // Stop any currently playing instance of this sample to prevent overlap buildup
+        try { p.stop(time); } catch(e) {}
+        p.start(time);
     }
 }
 
 // Player state
 const player = {
-    drumSynth: new DrumSynth(),
+    drumSampler: new DrumSampler(),
     midi: null,
     fileId: null,
     playing: false,
@@ -132,7 +92,12 @@ const player = {
 };
 
 async function loadAndPlay(fileId, filename, tempoHint) {
-    await player.drumSynth.init();
+    // Show loading state
+    const playerBar = document.getElementById('player-bar');
+    playerBar.classList.add('active');
+    document.getElementById('player-filename').textContent = 'Loading...';
+
+    await player.drumSampler.init();
     stopPlayback();
 
     player.fileId = fileId;
@@ -151,8 +116,6 @@ async function loadAndPlay(fileId, filename, tempoHint) {
     player.midi = new Midi(arrayBuffer);
 
     // Update UI
-    const playerBar = document.getElementById('player-bar');
-    playerBar.classList.add('active');
     document.getElementById('player-filename').textContent = filename;
     document.getElementById('player-tempo').value = Math.round(player.tempo);
     document.getElementById('player-tempo-display').textContent = Math.round(player.tempo);
@@ -182,18 +145,18 @@ function startPlayback() {
 
     // Find pattern duration
     const maxTime = notes.reduce((max, n) => Math.max(max, n.time), 0);
-    const patterDuration = maxTime + 0.01;
+    const patternDuration = maxTime + 0.01;
 
     // Schedule notes
     const part = new Tone.Part((time, event) => {
         const sampleName = GM_DRUM_SAMPLES[event.midi];
         if (sampleName) {
-            player.drumSynth.trigger(sampleName, event.velocity, time);
+            player.drumSampler.trigger(sampleName, event.velocity, time);
         }
     }, notes.map(n => [n.time, n]));
 
     part.loop = player.looping;
-    part.loopEnd = patterDuration;
+    part.loopEnd = patternDuration;
     part.start(0);
 
     Tone.getTransport().start();
