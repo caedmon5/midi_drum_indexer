@@ -31,7 +31,7 @@ Results can be auditioned directly in the browser using bundled drum samples (48
 
 ### 1. Download the MIDI archive
 
-Download the [800,000 Drum Percussion MIDI Archive](https://archive.org/details/800000_Drum_Percussion_MIDI_Archive6_19_15) from the Internet Archive. It's a single zip file (~1.5 GB). Unzip it somewhere on your machine.
+Download the [800,000 Drum Percussion MIDI Archive]([https://archive.org/details/800000_Drum_Percussion_MIDI_Archive6_19_15](https://mega.nz/file/ZxgAAIZB#oMYIyy7iLYtnpnwRsKOuVRttOVrAHdQ2-DqPil2s7Lc). It's a single zip file (~1.5 GB). Unzip it somewhere on your machine.
 
 ### 2. Clone this repo and install dependencies
 
