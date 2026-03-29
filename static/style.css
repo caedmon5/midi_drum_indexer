@@ -247,6 +247,8 @@ button, .btn {
 button:hover { background: #00b8d4; }
 button.secondary { background: #3a3a5a; color: #e0e0e0; }
 button.secondary:hover { background: #4a4a6a; }
+button.clear-btn { background: #3a3a5a; color: #ccc; font-size: 0.7rem; font-weight: 400; padding: 0.15rem 0.5rem; vertical-align: middle; margin-left: 0.5rem; border-radius: 3px; }
+button.clear-btn:hover { background: #4a4a6a; color: #00d4ff; }
 
 .btn-row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
 

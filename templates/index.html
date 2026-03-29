@@ -69,6 +69,10 @@
                 </div>
 
                 <div class="filter-group compact">
+                    <label><input type="checkbox" id="standard-only" checked> Standard instruments only</label>
+                </div>
+
+                <div class="filter-group compact">
                     <label for="sort-by">Sort by</label>
                     <select id="sort-by">
                         <option value="tempo">Tempo</option>
@@ -89,7 +93,7 @@
             <div class="filters-row filters-row-bottom" style="margin-top:0.75rem">
                 <div class="filters-left-stack">
                     <div class="filter-group">
-                        <h3>Beat Pattern</h3>
+                        <h3>Beat Pattern (Basic Kit) <button class="clear-btn" onclick="clearBeatPattern()">Clear</button></h3>
                         <div class="beat-grid-editor">
                             <table>
                                 <thead>
@@ -236,6 +240,11 @@ function sortBy(field) {
     document.getElementById('sort-by').value = field;
     doSearch();
 }
+function clearBeatPattern() {
+    document.querySelectorAll('.beat-cell').forEach(td => td.classList.remove('active'));
+    doSearch();
+}
+
 function resetFilters() {
     document.getElementById('text-search').value = '';
     document.getElementById('time-sig').value = 'any';
@@ -244,6 +253,7 @@ function resetFilters() {
     document.getElementById('feel').value = 'any';
     document.getElementById('pattern-type').value = 'any';
     document.getElementById('brush-filter').value = 'any';
+    document.getElementById('standard-only').checked = true;
     document.querySelectorAll('.folder-cb').forEach(cb => cb.checked = false);
     document.querySelectorAll('.tri-state').forEach(el => {
         el.dataset.state = 'any';

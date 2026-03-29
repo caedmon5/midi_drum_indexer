@@ -194,11 +194,18 @@ function closePlayer() {
 
 // Search functionality
 let searchTimeout = null;
+let searchController = null;
 
 function doSearch(resetOffset = true) {
     if (resetOffset) {
         currentOffset = 0;
     }
+
+    // Cancel any in-flight search request
+    if (searchController) {
+        searchController.abort();
+    }
+    searchController = new AbortController();
 
     const params = new URLSearchParams();
 
@@ -223,6 +230,10 @@ function doSearch(resetOffset = true) {
     // Brush
     const brush = document.getElementById('brush-filter').value;
     if (brush !== 'any') params.set('brush', brush);
+
+    // Standard instruments only
+    const standardOnly = document.getElementById('standard-only').checked;
+    params.set('standard', standardOnly ? '1' : '0');
 
     // Folders
     document.querySelectorAll('.folder-cb:checked').forEach(cb => {
@@ -263,9 +274,16 @@ function doSearch(resetOffset = true) {
     params.set('limit', 100);
     params.set('offset', currentOffset);
 
-    fetch('/api/search?' + params.toString())
+    // Show loading state
+    document.getElementById('result-count').textContent = 'Searching...';
+
+    const signal = searchController.signal;
+    fetch('/api/search?' + params.toString(), { signal })
         .then(r => r.json())
-        .then(data => renderResults(data));
+        .then(data => renderResults(data))
+        .catch(err => {
+            if (err.name !== 'AbortError') throw err;
+        });
 }
 
 let currentOffset = 0;
@@ -461,7 +479,7 @@ function debouncedSearch() {
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     // Bind search controls
-    document.querySelectorAll('#time-sig, #feel, #pattern-type, #brush-filter, #sort-by').forEach(el => {
+    document.querySelectorAll('#time-sig, #feel, #pattern-type, #brush-filter, #sort-by, #standard-only').forEach(el => {
         el.addEventListener('change', () => doSearch());
     });
     document.querySelectorAll('#tempo-min, #tempo-max').forEach(el => {

@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS features (
     swing_ratio REAL,
     note_density REAL,
     is_fill BOOLEAN DEFAULT 0,
-    is_brush BOOLEAN DEFAULT 0
+    is_brush BOOLEAN DEFAULT 0,
+    has_unmapped_notes BOOLEAN DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS instruments (
@@ -54,6 +55,18 @@ CREATE INDEX IF NOT EXISTS idx_file_instruments_instrument ON file_instruments(i
 CREATE INDEX IF NOT EXISTS idx_beat_grid_file ON beat_grid(file_id);
 CREATE INDEX IF NOT EXISTS idx_beat_grid_instrument ON beat_grid(instrument);
 CREATE INDEX IF NOT EXISTS idx_beat_grid_slot ON beat_grid(grid_slot);
+CREATE INDEX IF NOT EXISTS idx_beat_grid_composite ON beat_grid(file_id, instrument, grid_slot);
+
+-- Precomputed bitmask for beat pattern search on basic kit instruments.
+-- Each row stores a 16-bit mask encoding which grid slots have hits in bar 1.
+-- Bit 0 = slot "1", bit 1 = "1e", bit 2 = "1+", ..., bit 15 = "4a".
+CREATE TABLE IF NOT EXISTS beat_signature (
+    file_id INTEGER REFERENCES files(id),
+    instrument TEXT NOT NULL,
+    mask INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (file_id, instrument)
+);
+CREATE INDEX IF NOT EXISTS idx_beat_sig_inst_mask ON beat_signature(instrument, mask);
 CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder);
 
 -- Seed instrument catalog

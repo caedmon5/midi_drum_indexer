@@ -83,13 +83,14 @@ def insert_result(conn, result, instrument_lookup):
     file_id = cursor.lastrowid
 
     feat = result['features']
+    has_unmapped = any(name.startswith('note_') for name in result['instruments'])
     conn.execute(
         'INSERT INTO features (file_id, time_sig_stated, time_sig_detected, '
         'tempo_bpm, pattern_length_beats, swing_ratio, note_density, '
-        'is_fill, is_brush) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'is_fill, is_brush, has_unmapped_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         (file_id, feat['time_sig_stated'], feat['time_sig_detected'],
          feat['tempo_bpm'], feat['pattern_length_beats'], feat['swing_ratio'],
-         feat['note_density'], feat['is_fill'], feat['is_brush'])
+         feat['note_density'], feat['is_fill'], feat['is_brush'], has_unmapped)
     )
 
     for inst_name, count in result['instruments'].items():
@@ -127,6 +128,27 @@ def insert_result(conn, result, instrument_lookup):
             'velocity, grid_slot) VALUES (?, ?, ?, ?, ?)',
             (file_id, bg['instrument'], bg['beat_position'],
              bg['velocity'], bg['grid_slot'])
+        )
+
+    # Precompute beat signature bitmasks for basic kit instruments
+    sig_instruments = {'kick', 'snare', 'hihat_closed', 'hihat_open', 'ride', 'crash'}
+    slot_to_bit = {
+        '1': 0, '1e': 1, '1+': 2, '1a': 3,
+        '2': 4, '2e': 5, '2+': 6, '2a': 7,
+        '3': 8, '3e': 9, '3+': 10, '3a': 11,
+        '4': 12, '4e': 13, '4+': 14, '4a': 15,
+    }
+    masks = {}
+    for bg in result['beat_grid']:
+        inst = bg['instrument']
+        if inst in sig_instruments:
+            bit = slot_to_bit.get(bg['grid_slot'])
+            if bit is not None:
+                masks[inst] = masks.get(inst, 0) | (1 << bit)
+    for inst, mask in masks.items():
+        conn.execute(
+            'INSERT OR REPLACE INTO beat_signature (file_id, instrument, mask) '
+            'VALUES (?, ?, ?)', (file_id, inst, mask)
         )
 
 

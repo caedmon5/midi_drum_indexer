@@ -309,6 +309,11 @@ def search():
     conditions = ['1=1']
     params = []
 
+    # Standard instruments filter (default: hide files with unmapped notes)
+    standard_only = request.args.get('standard', '1')
+    if standard_only == '1':
+        conditions.append('f2.has_unmapped_notes = 0')
+
     # Time signature
     time_sig = request.args.get('time_sig')
     if time_sig and time_sig != 'any':
@@ -398,41 +403,38 @@ def search():
         )
         params.append(cat)
 
-    # Beat pattern search: e.g. beat_kick=1&beat_kick=3 means kick on beats 1 and 3
-    # Collect all selected slots per instrument
-    # Use items(multi=True) to get ALL values, not just the first per key
+    # Beat pattern search using precomputed bitmask signatures.
+    # Each basic kit instrument has a 16-bit mask in beat_signature where
+    # bit N corresponds to grid slot N (0="1", 1="1e", 2="1+", ..., 15="4a").
     beat_selections = {}
     for key, val in request.args.items(multi=True):
         if key.startswith('beat_') and val:
             instrument = key[5:]  # e.g. "kick", "snare"
             beat_selections.setdefault(instrument, []).append(val.strip())
 
-    # All 16th-note grid slots in one bar
-    all_bar_slots = []
-    for b in range(1, 5):
-        all_bar_slots.extend([f'{b}', f'{b}e', f'{b}+', f'{b}a'])
+    slot_to_bit = {
+        '1': 0, '1e': 1, '1+': 2, '1a': 3,
+        '2': 4, '2e': 5, '2+': 6, '2a': 7,
+        '3': 8, '3e': 9, '3+': 10, '3a': 11,
+        '4': 12, '4e': 13, '4+': 14, '4a': 15,
+    }
 
-    for instrument, slots in beat_selections.items():
-        # Must have hits on all selected slots
+    beat_joins = []
+    beat_join_params = []
+    for i, (instrument, slots) in enumerate(beat_selections.items()):
+        required_mask = 0
         for slot in slots:
-            conditions.append(
-                f'EXISTS (SELECT 1 FROM beat_grid bg '
-                f'WHERE bg.file_id = f1.id AND bg.instrument = ? '
-                f'AND bg.grid_slot = ?)'
-            )
-            params.extend([instrument, slot])
-
-        # Must NOT have hits on unselected slots within the first bar.
-        # Slots beyond beat 4 (multi-bar patterns) are unconstrained,
-        # since the beat grid editor only covers one bar.
-        disallowed = [s for s in all_bar_slots if s not in slots]
-        for slot in disallowed:
-            conditions.append(
-                f'NOT EXISTS (SELECT 1 FROM beat_grid bg '
-                f'WHERE bg.file_id = f1.id AND bg.instrument = ? '
-                f'AND bg.grid_slot = ?)'
-            )
-            params.extend([instrument, slot])
+            bit = slot_to_bit.get(slot)
+            if bit is not None:
+                required_mask |= (1 << bit)
+        disallowed_mask = 0xFFFF & ~required_mask
+        alias = f'bs{i}'
+        beat_joins.append(
+            f'JOIN beat_signature {alias} ON {alias}.file_id = f1.id '
+            f'AND {alias}.instrument = ? '
+            f'AND {alias}.mask & ? = ? AND {alias}.mask & ? = 0'
+        )
+        beat_join_params.extend([instrument, required_mask, required_mask, disallowed_mask])
 
     # Sort
     sort = request.args.get('sort', 'tempo')
@@ -446,8 +448,12 @@ def search():
     order_by = sort_map.get(sort, 'f2.tempo_bpm')
 
     where = ' AND '.join(conditions)
+    beat_join_clause = '\n        '.join(beat_joins)
     limit = request.args.get('limit', 100, type=int)
     offset = request.args.get('offset', 0, type=int)
+
+    # Params order: beat_join_params (for JOINs), then params (for WHERE), then limit/offset
+    all_params = beat_join_params + params
 
     sql = f'''
         SELECT f1.id, f1.path, f1.filename, f1.folder, f1.subfolder,
@@ -456,21 +462,22 @@ def search():
                f2.is_fill, f2.is_brush, f2.pattern_length_beats
         FROM files f1
         JOIN features f2 ON f1.id = f2.file_id
+        {beat_join_clause}
         WHERE {where}
         ORDER BY {order_by}
         LIMIT ? OFFSET ?
     '''
-    params.extend([limit, offset])
 
-    rows = db.execute(sql, params).fetchall()
+    rows = db.execute(sql, all_params + [limit, offset]).fetchall()
 
     # Get total count
     count_sql = f'''
         SELECT COUNT(*) FROM files f1
         JOIN features f2 ON f1.id = f2.file_id
+        {beat_join_clause}
         WHERE {where}
     '''
-    total = db.execute(count_sql, params[:-2]).fetchone()[0]
+    total = db.execute(count_sql, all_params).fetchone()[0]
 
     results = []
     for row in rows:
