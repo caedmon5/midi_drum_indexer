@@ -420,9 +420,16 @@ function renderBeatGrid(grid) {
         'kick': 'KK', 'snare': 'SN', 'hihat_closed': 'HH', 'hihat_pedal': 'HP',
         'hihat_open': 'HO', 'ride': 'RD', 'ride_bell': 'RB', 'crash': 'CR',
     };
+    const instNames = {
+        'kick': 'Kick', 'snare': 'Snare', 'hihat_closed': 'Closed Hi-Hat',
+        'hihat_pedal': 'Pedal Hi-Hat', 'hihat_open': 'Open Hi-Hat',
+        'ride': 'Ride', 'ride_bell': 'Ride Bell', 'crash': 'Crash',
+    };
 
     for (const inst of instruments) {
-        html += `<tr><th>${instLabels[inst] || inst.substring(0, 3).toUpperCase()}</th>`;
+        const label = instLabels[inst] || inst.substring(0, 3).toUpperCase();
+        const name = instNames[inst] || inst.replace(/_/g, ' ');
+        html += `<tr><th title="${name}">${label}</th>`;
         for (const slot of slots) {
             const vel = hits[inst] && hits[inst][slot];
             if (vel) {
