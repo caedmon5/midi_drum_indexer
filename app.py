@@ -398,18 +398,41 @@ def search():
         )
         params.append(cat)
 
-    # Beat pattern search: e.g. beat_kick=1,3 means kick on beats 1 and 3
-    for key, val in request.args.items():
+    # Beat pattern search: e.g. beat_kick=1&beat_kick=3 means kick on beats 1 and 3
+    # Collect all selected slots per instrument
+    # Use items(multi=True) to get ALL values, not just the first per key
+    beat_selections = {}
+    for key, val in request.args.items(multi=True):
         if key.startswith('beat_') and val:
             instrument = key[5:]  # e.g. "kick", "snare"
-            slots = [s.strip() for s in val.split(',')]
-            for slot in slots:
-                conditions.append(
-                    f'EXISTS (SELECT 1 FROM beat_grid bg '
-                    f'WHERE bg.file_id = f1.id AND bg.instrument = ? '
-                    f'AND bg.grid_slot = ?)'
-                )
-                params.extend([instrument, slot])
+            beat_selections.setdefault(instrument, []).append(val.strip())
+
+    # All 16th-note grid slots in one bar
+    all_bar_slots = []
+    for b in range(1, 5):
+        all_bar_slots.extend([f'{b}', f'{b}e', f'{b}+', f'{b}a'])
+
+    for instrument, slots in beat_selections.items():
+        # Must have hits on all selected slots
+        for slot in slots:
+            conditions.append(
+                f'EXISTS (SELECT 1 FROM beat_grid bg '
+                f'WHERE bg.file_id = f1.id AND bg.instrument = ? '
+                f'AND bg.grid_slot = ?)'
+            )
+            params.extend([instrument, slot])
+
+        # Must NOT have hits on unselected slots within the first bar.
+        # Slots beyond beat 4 (multi-bar patterns) are unconstrained,
+        # since the beat grid editor only covers one bar.
+        disallowed = [s for s in all_bar_slots if s not in slots]
+        for slot in disallowed:
+            conditions.append(
+                f'NOT EXISTS (SELECT 1 FROM beat_grid bg '
+                f'WHERE bg.file_id = f1.id AND bg.instrument = ? '
+                f'AND bg.grid_slot = ?)'
+            )
+            params.extend([instrument, slot])
 
     # Sort
     sort = request.args.get('sort', 'tempo')

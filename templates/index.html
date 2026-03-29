@@ -13,135 +13,146 @@
     <div class="layout">
         <!-- Filters Panel -->
         <div class="filters">
-            <div class="filter-group">
-                <label for="text-search">Search</label>
-                <input type="text" id="text-search" placeholder="filename or path...">
-            </div>
+            <!-- Row 1: dropdowns and text search -->
+            <div class="filters-row">
+                <div class="filter-group wide">
+                    <label for="text-search">Search</label>
+                    <input type="text" id="text-search" placeholder="filename or path...">
+                </div>
 
-            <div class="filter-group">
-                <label for="time-sig">Time Signature</label>
-                <select id="time-sig">
-                    <option value="any">Any</option>
-                    <option value="4/4">4/4</option>
-                    <option value="3/4">3/4</option>
-                    <option value="6/8">6/8</option>
-                    <option value="5/4">5/4</option>
-                    <option value="7/8">7/8</option>
-                </select>
-            </div>
+                <div class="filter-group compact">
+                    <label for="time-sig">Time Sig</label>
+                    <select id="time-sig">
+                        <option value="any">Any</option>
+                        <option value="4/4">4/4</option>
+                        <option value="3/4">3/4</option>
+                        <option value="6/8">6/8</option>
+                        <option value="5/4">5/4</option>
+                        <option value="7/8">7/8</option>
+                    </select>
+                </div>
 
-            <div class="filter-group">
-                <label>Tempo (BPM)</label>
-                <div class="range-row">
-                    <input type="number" id="tempo-min" placeholder="Min" min="20" max="300">
-                    <span>-</span>
-                    <input type="number" id="tempo-max" placeholder="Max" min="20" max="300">
+                <div class="filter-group compact">
+                    <label>BPM</label>
+                    <div class="range-row">
+                        <input type="number" id="tempo-min" placeholder="Min" min="20" max="300">
+                        <span>-</span>
+                        <input type="number" id="tempo-max" placeholder="Max" min="20" max="300">
+                    </div>
+                </div>
+
+                <div class="filter-group compact">
+                    <label for="feel">Feel</label>
+                    <select id="feel">
+                        <option value="any">Any</option>
+                        <option value="straight">Straight</option>
+                        <option value="swing">Swing</option>
+                    </select>
+                </div>
+
+                <div class="filter-group compact">
+                    <label for="pattern-type">Type</label>
+                    <select id="pattern-type">
+                        <option value="any">Any</option>
+                        <option value="pattern">Pattern</option>
+                        <option value="fill">Fill</option>
+                    </select>
+                </div>
+
+                <div class="filter-group compact">
+                    <label for="brush-filter">Brush</label>
+                    <select id="brush-filter">
+                        <option value="any">Any</option>
+                        <option value="yes">Brush only</option>
+                        <option value="no">No brushes</option>
+                    </select>
+                </div>
+
+                <div class="filter-group compact">
+                    <label for="sort-by">Sort by</label>
+                    <select id="sort-by">
+                        <option value="tempo">Tempo</option>
+                        <option value="name">Name</option>
+                        <option value="folder">Genre</option>
+                        <option value="density">Density</option>
+                        <option value="length">Length</option>
+                    </select>
+                </div>
+
+                <div class="btn-row">
+                    <button onclick="doSearch()">Search</button>
+                    <button class="secondary" onclick="resetFilters()">Reset</button>
                 </div>
             </div>
 
-            <div class="filter-group">
-                <label for="feel">Feel</label>
-                <select id="feel">
-                    <option value="any">Any</option>
-                    <option value="straight">Straight</option>
-                    <option value="swing">Swing</option>
-                </select>
-            </div>
+            <!-- Row 2: Beat Pattern & Genre stacked on left, Instruments column on right -->
+            <div class="filters-row filters-row-bottom" style="margin-top:0.75rem">
+                <div class="filters-left-stack">
+                    <div class="filter-group">
+                        <h3>Beat Pattern</h3>
+                        <div class="beat-grid-editor">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>1</th><th>1e</th><th>1+</th><th>1a</th>
+                                        <th>2</th><th>2e</th><th>2+</th><th>2a</th>
+                                        <th>3</th><th>3e</th><th>3+</th><th>3a</th>
+                                        <th>4</th><th>4e</th><th>4+</th><th>4a</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set beat_instruments = ['kick','snare','hihat_closed','hihat_open','ride','crash'] %}
+                                    {% set beat_labels = ['Kick','Snare','HH Cl','HH Op','Ride','Crash'] %}
+                                    {% set slots = ['1','1e','1+','1a','2','2e','2+','2a','3','3e','3+','3a','4','4e','4+','4a'] %}
+                                    {% for inst in beat_instruments %}
+                                    <tr>
+                                        <th>{{ beat_labels[loop.index0] }}</th>
+                                        {% for slot in slots %}
+                                        <td class="beat-cell" data-instrument="{{ inst }}" data-slot="{{ slot }}"
+                                            onclick="toggleBeatCell(this)"></td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
-            <div class="filter-group">
-                <label for="pattern-type">Type</label>
-                <select id="pattern-type">
-                    <option value="any">Any</option>
-                    <option value="pattern">Pattern</option>
-                    <option value="fill">Fill</option>
-                </select>
-            </div>
-
-            <div class="filter-group">
-                <label for="brush-filter">Brush</label>
-                <select id="brush-filter">
-                    <option value="any">Any</option>
-                    <option value="yes">Brush only</option>
-                    <option value="no">No brushes</option>
-                </select>
-            </div>
-
-            <div class="filter-group">
-                <h3>Genre / Folder</h3>
-                <div class="checkbox-group" style="max-height:150px;overflow-y:auto">
-                    {% for folder in folders %}
-                    <label><input type="checkbox" class="folder-cb" value="{{ folder }}"> {{ folder }}</label>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <div class="filter-group">
-                <h3>Instruments <span style="font-size:0.65rem;color:#666">(click to cycle: any / must have / must not)</span></h3>
-                <div class="instrument-categories">
-                    {% for cat in categories %}
-                    <details class="inst-cat" {% if cat in ['Kick','Snare','Hi-Hat','Ride'] %}open{% endif %}>
-                        <summary>
-                            <span class="tri-state cat-filter" data-cat="{{ cat }}" data-state="any"
-                                  onclick="event.preventDefault(); cycleTriState(this)">{{ cat }}</span>
-                        </summary>
-                        <div class="checkbox-group" style="margin-left:0.5rem">
-                            {% for inst in instruments_by_cat[cat] %}
-                            <span class="tri-state inst-filter" data-inst-id="{{ inst.id }}" data-state="any"
-                                  onclick="cycleTriState(this)">{{ inst.name | replace('_',' ') }}</span>
+                    <div class="filter-group">
+                        <h3>Genre / Folder</h3>
+                        <div class="checkbox-group">
+                            {% for folder in folders %}
+                            <label><input type="checkbox" class="folder-cb" value="{{ folder }}"> {{ folder }}</label>
                             {% endfor %}
                         </div>
-                    </details>
-                    {% endfor %}
+                    </div>
                 </div>
-            </div>
 
-            <div class="filter-group">
-                <h3>Beat Pattern</h3>
-                <div class="beat-grid-editor">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th></th>
-                                <th>1</th><th>1e</th><th>1+</th><th>1a</th>
-                                <th>2</th><th>2e</th><th>2+</th><th>2a</th>
-                                <th>3</th><th>3e</th><th>3+</th><th>3a</th>
-                                <th>4</th><th>4e</th><th>4+</th><th>4a</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% set beat_instruments = ['kick','snare','hihat_closed','hihat_open','ride','crash'] %}
-                            {% set beat_labels = ['Kick','Snare','HH Cl','HH Op','Ride','Crash'] %}
-                            {% set slots = ['1','1e','1+','1a','2','2e','2+','2a','3','3e','3+','3a','4','4e','4+','4a'] %}
-                            {% for inst in beat_instruments %}
-                            <tr>
-                                <th>{{ beat_labels[loop.index0] }}</th>
-                                {% for slot in slots %}
-                                <td class="beat-cell" data-instrument="{{ inst }}" data-slot="{{ slot }}"
-                                    onclick="toggleBeatCell(this)"></td>
+                <div class="filter-group filters-right-col">
+                    <h3>Instruments <span style="font-size:0.65rem;color:#666">(click to cycle: any / must have / must not)</span></h3>
+                    <div class="instrument-categories">
+                        {% for cat in categories %}
+                        <details class="inst-cat" {% if cat in ['Kick','Snare','Hi-Hat','Ride'] %}open{% endif %}>
+                            <summary>
+                                <span class="tri-state cat-filter" data-cat="{{ cat }}" data-state="any"
+                                      onclick="event.preventDefault(); cycleTriState(this)">{{ cat }}</span>
+                            </summary>
+                            <div class="checkbox-group" style="margin-left:0.5rem">
+                                {% for inst in instruments_by_cat[cat] %}
+                                <span class="tri-state inst-filter" data-inst-id="{{ inst.id }}" data-state="any"
+                                      onclick="cycleTriState(this)">{{ inst.name | replace('_',' ') }}</span>
                                 {% endfor %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                            </div>
+                        </details>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
-
-            <div class="filter-group">
-                <label for="sort-by">Sort by</label>
-                <select id="sort-by">
-                    <option value="tempo">Tempo</option>
-                    <option value="name">Name</option>
-                    <option value="folder">Genre</option>
-                    <option value="density">Density</option>
-                    <option value="length">Length</option>
-                </select>
-            </div>
-
-            <div class="btn-row">
-                <button onclick="doSearch()">Search</button>
-                <button class="secondary" onclick="resetFilters()">Reset</button>
             </div>
         </div>
+
+        <!-- Drag handle -->
+        <div class="resize-handle" id="resize-handle"></div>
 
         <!-- Results Panel -->
         <div class="results-panel">
@@ -153,12 +164,11 @@
                     <tr>
                         <th></th>
                         <th onclick="sortBy('name')">Name</th>
-                        <th onclick="sortBy('folder')">Genre</th>
                         <th>Time Sig</th>
                         <th onclick="sortBy('tempo')">BPM</th>
                         <th>Feel</th>
-                        <th>Type</th>
                         <th>Instruments</th>
+                        <th onclick="sortBy('folder')">Genre</th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
@@ -189,6 +199,39 @@
 </div>
 
 <script>
+// Draggable resize handle between filters and results
+(function() {
+    const handle = document.getElementById('resize-handle');
+    const filters = document.querySelector('.filters');
+    let dragging = false;
+    let startY, startHeight;
+
+    handle.addEventListener('mousedown', (e) => {
+        dragging = true;
+        startY = e.clientY;
+        startHeight = filters.offsetHeight;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const delta = e.clientY - startY;
+        const newHeight = Math.max(60, startHeight + delta);
+        filters.style.height = newHeight + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+})();
+
 function sortBy(field) {
     document.getElementById('sort-by').value = field;
     doSearch();

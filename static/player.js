@@ -95,6 +95,7 @@ async function loadAndPlay(fileId, filename, tempoHint) {
     // Show loading state
     const playerBar = document.getElementById('player-bar');
     playerBar.classList.add('active');
+    document.body.classList.add('player-visible');
     document.getElementById('player-filename').textContent = 'Loading...';
 
     await player.drumSampler.init();
@@ -188,6 +189,7 @@ function setTempo(bpm) {
 function closePlayer() {
     stopPlayback();
     document.getElementById('player-bar').classList.remove('active');
+    document.body.classList.remove('player-visible');
 }
 
 // Search functionality
@@ -275,7 +277,7 @@ function renderResults(data) {
     countEl.textContent = `${data.total} results`;
 
     if (data.results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#666">No matching patterns found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#666">No matching patterns found</td></tr>';
         return;
     }
 
@@ -290,12 +292,11 @@ function renderResults(data) {
         return `<tr onclick="selectRow(this, ${r.id}, '${escapeHtml(r.filename)}', ${r.tempo_bpm})">
             <td><button class="play-btn" onclick="event.stopPropagation(); loadAndPlay(${r.id}, '${escapeHtml(r.filename)}', ${r.tempo_bpm})">\u25B6</button></td>
             <td title="${escapeHtml(r.path)}">${escapeHtml(r.filename)}</td>
-            <td>${r.folder}</td>
             <td>${r.time_sig}</td>
             <td>${Math.round(r.tempo_bpm)}</td>
             <td>${feel}</td>
-            <td>${r.is_fill ? 'fill' : r.is_brush ? 'brush' : ''}</td>
             <td><div class="instruments-cell">${instTags}</div></td>
+            <td>${r.folder}</td>
         </tr>`;
     }).join('');
 
@@ -320,8 +321,104 @@ function goToPage(page) {
 }
 
 function selectRow(tr, fileId, filename, tempo) {
+    // If clicking the already-selected row, toggle it closed
+    if (tr.classList.contains('selected')) {
+        tr.classList.remove('selected');
+        document.querySelectorAll('.grid-detail-row').forEach(r => r.remove());
+        return;
+    }
+
+    // Remove previous selection and grid detail rows
     document.querySelectorAll('.results-table tr.selected').forEach(r => r.classList.remove('selected'));
+    document.querySelectorAll('.grid-detail-row').forEach(r => r.remove());
+
     tr.classList.add('selected');
+
+    // Fetch and show beat grid visualization
+    fetch(`/api/file/${fileId}/grid`)
+        .then(r => r.json())
+        .then(grid => {
+            const detailRow = document.createElement('tr');
+            detailRow.className = 'grid-detail-row';
+            const td = document.createElement('td');
+            td.colSpan = 7;
+            td.innerHTML = renderBeatGrid(grid);
+            detailRow.appendChild(td);
+            tr.after(detailRow);
+        });
+}
+
+function renderBeatGrid(grid) {
+    if (!grid.length) return '<div style="padding:0.5rem;color:#666">No beat data</div>';
+
+    // Find all instruments and max beat
+    const instruments = [];
+    const instSet = new Set();
+    let maxBeat = 4;
+    for (const hit of grid) {
+        if (!instSet.has(hit.instrument)) {
+            instSet.add(hit.instrument);
+            instruments.push(hit.instrument);
+        }
+        const beatNum = parseInt(hit.grid_slot);
+        if (beatNum > maxBeat) maxBeat = beatNum;
+    }
+
+    // Preferred instrument order
+    const instOrder = ['kick', 'snare', 'hihat_closed', 'hihat_pedal', 'hihat_open', 'ride', 'ride_bell', 'crash'];
+    instruments.sort((a, b) => {
+        const ai = instOrder.indexOf(a);
+        const bi = instOrder.indexOf(b);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    // Cap display at 2 bars (8 beats) for readability
+    const displayBeats = Math.min(maxBeat, 8);
+
+    // Build slot headers
+    const suffixes = ['', 'e', '+', 'a'];
+    const slots = [];
+    for (let b = 1; b <= displayBeats; b++) {
+        for (const s of suffixes) {
+            slots.push(`${b}${s}`);
+        }
+    }
+
+    // Build hit lookup: instrument -> set of grid_slots
+    const hits = {};
+    for (const h of grid) {
+        if (!hits[h.instrument]) hits[h.instrument] = {};
+        hits[h.instrument][h.grid_slot] = h.velocity;
+    }
+
+    // Render table
+    let html = '<div class="grid-detail"><table class="beat-grid-display"><thead><tr><th></th>';
+    for (let b = 1; b <= displayBeats; b++) {
+        html += `<th class="beat-marker">${b}</th><th></th><th></th><th></th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    const instLabels = {
+        'kick': 'KK', 'snare': 'SN', 'hihat_closed': 'HH', 'hihat_pedal': 'HP',
+        'hihat_open': 'HO', 'ride': 'RD', 'ride_bell': 'RB', 'crash': 'CR',
+    };
+
+    for (const inst of instruments) {
+        html += `<tr><th>${instLabels[inst] || inst.substring(0, 3).toUpperCase()}</th>`;
+        for (const slot of slots) {
+            const vel = hits[inst] && hits[inst][slot];
+            if (vel) {
+                const opacity = Math.max(0.4, vel / 127);
+                html += `<td class="grid-hit" style="opacity:${opacity}"></td>`;
+            } else {
+                html += `<td class="grid-empty"></td>`;
+            }
+        }
+        html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    return html;
 }
 
 function getCatClass(category) {
