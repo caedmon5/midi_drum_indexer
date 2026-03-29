@@ -19,13 +19,18 @@ The archive contains ~764k MIDI files organized in folders by genre, but with in
 - **Feel** — straight or swing
 - **Genre** — filter by archive folder (Jazz, Rock, Latin, Funk, Blues, etc.)
 - **Instruments** — tri-state filters (must have / must not have / don't care) at both category and individual instrument level
-- **Beat pattern** — clickable 16th-note grid: specify "kick on 1 and 3, snare on 2 and 4" and find every pattern that matches
+- **Beat pattern** — clickable 16th-note grid: specify "kick on 1 and 3, snare on 2 and 4" and find patterns with exactly that groove — no extra hits on those instruments, so you get clean matches rather than fills
 - **Type** — pattern vs. fill
 - **Text search** — filename and path substring matching
+- **Beat grid visualization** — click any result row to expand an inline beat grid showing all instruments and hit positions, with velocity indicated by opacity
 
 ## In-browser playback
 
 Results can be auditioned directly in the browser using bundled drum samples (48 instruments, ~290KB total) played back via Tone.js. Covers the full GM percussion map including kit drums, Latin percussion, shakers, bells, and more. Playback supports looping and tempo adjustment.
+
+## Layout
+
+The UI uses a stacked over/under layout — search filters spread across the full width on top, results table below. A draggable resize handle between them lets you adjust the split to suit your screen. Filters are arranged with dropdowns inline on the first row, then beat grid and genre on the left with instruments in a column on the right.
 
 ## Getting started
 
