@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS files (
     midi_type INTEGER,
     ticks_per_beat INTEGER,
     duration_sec REAL,
-    num_notes INTEGER
+    num_notes INTEGER,
+    archive_root TEXT
 );
 
 CREATE TABLE IF NOT EXISTS features (

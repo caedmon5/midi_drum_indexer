@@ -270,7 +270,7 @@ def _run_indexer(archive_root, index_all):
 
             if len(results_batch) >= 500:
                 for r in results_batch:
-                    insert_result(conn, r, instrument_lookup)
+                    insert_result(conn, r, instrument_lookup, archive_root)
                 conn.commit()
                 results_batch.clear()
 
@@ -283,7 +283,7 @@ def _run_indexer(archive_root, index_all):
 
     # Insert remaining
     for r in results_batch:
-        insert_result(conn, r, instrument_lookup)
+        insert_result(conn, r, instrument_lookup, archive_root)
     conn.commit()
 
     total = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
@@ -515,14 +515,16 @@ def beat_grid(file_id):
 @app.route('/api/midi/<int:file_id>')
 def serve_midi(file_id):
     """Serve a MIDI file for playback."""
-    archive_root = get_archive_root()
-    if not archive_root:
-        return 'Archive not configured', 500
     db = get_db()
-    row = db.execute('SELECT path FROM files WHERE id = ?', (file_id,)).fetchone()
+    row = db.execute('SELECT path, archive_root FROM files WHERE id = ?',
+                     (file_id,)).fetchone()
     db.close()
     if not row:
         return 'Not found', 404
+    # Use per-file archive_root if available, fall back to config
+    archive_root = row['archive_root'] or get_archive_root()
+    if not archive_root:
+        return 'Archive not configured', 500
     full_path = os.path.join(archive_root, row['path'])
     if not os.path.isfile(full_path):
         return 'File not found', 404

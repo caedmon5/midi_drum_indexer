@@ -25,6 +25,10 @@ def init_db(db_path):
     conn = sqlite3.connect(db_path)
     with open(schema_path) as f:
         conn.executescript(f.read())
+    # Migrate: add archive_root column if missing (existing databases)
+    cols = {row[1] for row in conn.execute('PRAGMA table_info(files)')}
+    if 'archive_root' not in cols:
+        conn.execute('ALTER TABLE files ADD COLUMN archive_root TEXT')
     conn.commit()
     return conn
 
@@ -69,16 +73,16 @@ def build_instrument_lookup(conn):
     return {row[1]: row[0] for row in cursor}
 
 
-def insert_result(conn, result, instrument_lookup):
+def insert_result(conn, result, instrument_lookup, archive_root=None):
     """Insert one analysis result into the database."""
     f = result['file']
     cursor = conn.execute(
         'INSERT INTO files (path, filename, folder, subfolder, file_size, '
-        'midi_type, ticks_per_beat, duration_sec, num_notes) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'midi_type, ticks_per_beat, duration_sec, num_notes, archive_root) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         (f['path'], f['filename'], f['folder'], f['subfolder'],
          f['file_size'], f['midi_type'], f['ticks_per_beat'],
-         f['duration_sec'], f['num_notes'])
+         f['duration_sec'], f['num_notes'], archive_root)
     )
     file_id = cursor.lastrowid
 
@@ -215,13 +219,13 @@ def main():
             # Batch insert every 500 results
             if len(results) >= 500:
                 for r in results:
-                    insert_result(conn, r, instrument_lookup)
+                    insert_result(conn, r, instrument_lookup, archive_root)
                 conn.commit()
                 results.clear()
 
     # Insert remaining
     for r in results:
-        insert_result(conn, r, instrument_lookup)
+        insert_result(conn, r, instrument_lookup, archive_root)
     conn.commit()
 
     total = conn.execute('SELECT COUNT(*) FROM files').fetchone()[0]
